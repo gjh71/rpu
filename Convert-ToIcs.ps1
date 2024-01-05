@@ -1,80 +1,84 @@
-$file = "./2024-wedstrijden.csv"
-$events = Get-Content -Path $file -raw | ConvertFrom-Csv
-$events | Format-Table
-
-
-function CreateNewEvent {
-
-    # Custom date formats that we want to use
-    $longDateFormat = "yyyyMMddTHHmmssZ"
-    $dateFormat = "yyyyMMdd"
-
-    # Prompt the user for the start date in a specific format
-    $startDate = Read-Host -Prompt ‘Enter the start date of the event in the format "yyyymmdd"’
-
-    # Give the event a name specified by the user
-    $eventSubject = Read-Host -Prompt ‘Enter the event subject’
-
-    # This field is optional, but let’s ask for the details (description)
-    $eventDesc = Read-Host -Prompt ‘Enter the event description summary (optional)’
-
-    # Provide location information (also optional)
-    $eventLocation = Read-Host -Prompt ‘Enter the event location (optional)’
-
-    # Instantiate .NET StringBuilder
-    $sb = [System.Text.StringBuilder]::new()
-
-    # Fill in ICS/iCalendar properties based on RFC2445
-    [void]$sb.AppendLine(‘BEGIN:VCALENDAR’)
-    [void]$sb.AppendLine(‘VERSION:2.0’)
-    [void]$sb.AppendLine(‘METHOD:PUBLISH’)
-    [void]$sb.AppendLine(‘PRODID:-//Braunweb//PowerShell ICS Creator Sample//EN’)
-    [void]$sb.AppendLine(‘BEGIN:VEVENT’)
-    [void]$sb.AppendLine("UID:" + [guid]::NewGuid())
-    [void]$sb.AppendLine("CREATED:" + [datetime]::Now.ToUniversalTime().ToString($longDateFormat))
-    [void]$sb.AppendLine("DTSTAMP:" + [datetime]::Now.ToUniversalTime().ToString($longDateFormat))
-    [void]$sb.AppendLine("LAST-MODIFIED:" + [datetime]::Now.ToUniversalTime().ToString($longDateFormat))
-    [void]$sb.AppendLine("SEQUENCE:0")
-    [void]$sb.AppendLine("DTSTART:" + $startDate)
-    [void]$sb.AppendLine("RRULE:FREQ=YEARLY;INTERVAL=1")
-    [void]$sb.AppendLine("DESCRIPTION:" + $eventDesc)
-    [void]$sb.AppendLine("SUMMARY:" + $eventSubject)
-    [void]$sb.AppendLine("LOCATION:" + $eventLocation)
-    [void]$sb.AppendLine("TRANSP:TRANSPARENT")
-    [void]$sb.AppendLine(‘END:VEVENT’)
-    [void]$sb.AppendLine(‘END:VCALENDAR’)
-}
-
-function Get-Event{
+function Get-Calendar {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory=$true)]
+        [PSCustomObject[]]$events
+    )
+    $vCalendar = @"
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:PUBLISH
+X-WR-CALNAME:Sloeproeiwedstrijden-2024
+PRODID:-//DevOps1//RPU-IcsGenerator-0.1//EN
+
+"@
+    foreach ($event in $events) {
+        $parm = @{
+            eventDate        = [datetime] (Get-Date $event.date)
+            eventDescription = $event.description
+            eventSummary     = $event.summary
+            eventLocation    = $event.location
+        }
+        $vCalendar += Get-Event @parm
+    }
+    $vCalendar += @"
+END:VCALENDAR
+"@
+    return $vCalendar
+}
+
+function Get-MD5Hash {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$input
+    )
+    
+    $stringAsStream = [System.IO.MemoryStream]::new()
+    $writer = [System.IO.StreamWriter]::new($stringAsStream)
+    $writer.Write($input)
+    $writer.Flush()
+    $stringAsStream.Position = 0
+    $md5Hash = Get-FileHash -InputStream $stringAsStream | Select-Object -ExpandProperty Hash
+    return $md5Hash
+}
+
+function Get-Event {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
         [datetime]$eventDate,
         $eventDescription,
         $eventSummary,
         $eventLocation
     )
-    $eventGuid = [guid]::NewGuid()
+    # $eventGuid = [guid]::NewGuid()
+    # make sure the same 'guid' is generated for the same event
+    $md5Hash = Get-MD5Hash -input ("{0:yyyyMMdd}{1}{2}" -f $eventDate, $eventDescription, $eventLocation)
+    $eventGuid = "{0}-{1}-{2}-{3}-{4}" -f $md5Hash.Substring(0,8), $md5Hash.Substring(8,4), $md5Hash.Substring(12,4), $md5Hash.Substring(16,4), $md5hash.Substring(20)
     $now = Get-Date
-    $event = @"
-BEGIN:VCALENDAR
-VERSION:2.0
-METHOD:PUBLISH
-PRODID:-//Braunweb//PowerShell ICS Creator Sample//EN
+    $eventStart = Get-Date $eventDate -Hour 5 -Minute 30
+    $eventEnd = Get-Date $eventDate -Hour 16 -Minute 30
+    $vEvent = @"
 BEGIN:VEVENT
 UID:{0}
-CREATED: {1:yyyyMMddHH:mm:ss}
-DTSTAMP: {1:yyyyMMddHH:mm:ss}
-LAST-MODIFIED: {1:yyyyMMddHH:mm:ss}
+CREATED:{1:yyyyMMddTHHmmssZ}
+DTSTAMP:{1:yyyyMMddTHHmmssZ}
+LAST-MODIFIED:{1:yyyyMMddTHHmmssZ}
 SEQUENCE:0
-DTSTART:" + $startDat
-RRULE:FREQ=YEARLY;INTERVAL=1
-DESCRIPTION:" + $eventDes
-SUMMARY:" + $eventSubjec
-LOCATION:" + $eventLocatio
-TRANSP:TRANSPARENT
+SUMMARY;LANGUAGE=nl-nl:{3}
+DTSTART:{6:yyyyMMddTHHmmssZ}
+DTEND:{7:yyyyMMddTHHmmssZ}
+DESCRIPTION:{4}
+LOCATION:{5}
+TRANSP:OPAQUE
 END:VEVENT
-END:VCALENDAR
-"@ -f $eventGuid
 
+"@ -f $eventGuid, $now, $eventDate, $eventDescription, $eventSummary, $eventLocation, $eventStart, $eventEnd
+    return $vEvent
 }
+
+$file = Join-Path -Path $PSScriptRoot -ChildPath "2024-wedstrijden.csv"
+$events = Get-Content -Path $file -raw | ConvertFrom-Csv
+$events | Format-Table
+$ics = Join-Path -Path $PSScriptRoot -ChildPath "calendar.ics"
+Get-Calendar -events $events | out-file $ics
