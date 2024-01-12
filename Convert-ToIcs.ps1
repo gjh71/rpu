@@ -1,7 +1,8 @@
 function Get-Calendar {
     [CmdletBinding()]
     param (
-        [PSCustomObject[]]$events
+        [PSCustomObject[]]$events,
+        $interest
     )
     $vCalendar = @"
 BEGIN:VCALENDAR
@@ -12,9 +13,16 @@ PRODID:-//DevOps1//RPU-IcsGenerator-0.1//EN
 
 "@
     foreach ($event in $events) {
+        $evDateParts = $event.date.split("-")
+        if ($interest){
+            $evDescription = "?-M2-?-{0}-?" -f $event.description.ToUpper()
+        }
+        else{
+            $evDescription = $event.description
+        }
         $parm = @{
-            eventDate        = [datetime] (Get-Date $event.date)
-            eventDescription = $event.description
+            eventDate        = Get-Date -Year $evDateParts[2] -Month $evDateParts[1] -Day $evDateParts[0]
+            eventDescription = $evDescription
             eventSummary     = $event.summary
             eventLocation    = $event.location
         }
@@ -77,8 +85,9 @@ END:VEVENT
     return $vEvent
 }
 
+$interest = $true
 $file = Join-Path -Path $PSScriptRoot -ChildPath "2024-wedstrijden.csv"
 $events = Get-Content -Path $file -raw | ConvertFrom-Csv
 $events | Format-Table
 $ics = Join-Path -Path $PSScriptRoot -ChildPath "calendar.ics"
-Get-Calendar -events $events | out-file $ics
+Get-Calendar -events $events -interest $interest| out-file $ics
