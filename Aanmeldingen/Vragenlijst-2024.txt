@@ -1,0 +1,17 @@
+1. Naam
+2. Emailadres
+3. Geslacht
+4. Telefoonnr
+5. Ervaring met sloeproeien
+6. Ambitie
+  - Rustig team
+  - Niet fanatiek, lekker bezig
+  - Fanatiek team, 2x /wk 
+7. Op welke dagen kun je trainen
+8. Hoe vaak per week trainen
+9. Conditie
+10. Ervaring met teamsport
+11. Coachervaring
+12. Bouwjaar
+13. Welke dagen kun je echt niet?
+14. Wedstrijdteam
